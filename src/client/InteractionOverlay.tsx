@@ -89,7 +89,16 @@ export function InteractionOverlay({
 
   const items = useRemotePending(state => state.items)
   const show = enabled ?? autoEnabled
-  const item = items[0]
+  // Page-lock fix: a not-ready hint for the CURRENT session means the
+  // official composer card already shows that interaction — the blocking
+  // "打开会话" fallback here would freeze the page, because openSession()
+  // is a no-op for the session already open. Prefer a ready item or another
+  // session's item; render nothing when only a current-session hint is
+  // pending.
+  let item: (typeof items)[number] | undefined
+  for (const candidate of items) {
+    if (candidate.ready || !candidate.current) { item = candidate; break }
+  }
   if (!show || item === undefined) return null
 
   const remaining = items.length

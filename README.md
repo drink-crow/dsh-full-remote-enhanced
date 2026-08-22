@@ -10,6 +10,17 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-plugin-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/JUANWANG-BUAA/dsh-full-remote/pulls)
 
+> **Fork notice / 分支说明** — This fork fixes one bug on top of upstream
+> `JUANWANG-BUAA/dsh-full-remote`:
+>
+> **Interaction overlay page-lock fix**: when a pending interaction for the CURRENT
+> session had not yet synced into the bound session snapshot (a `ready: false` hint
+> item), the overlay rendered the blocking "有操作需要确认 / 打开会话" fallback card
+> even though the official composer card was already visible — and since
+> `openSession()` is a no-op for the session already open, the full-screen backdrop
+> locked the page until a reload. The overlay now skips not-ready hints for the
+> current session (see `src/client/InteractionOverlay.tsx`).
+
 **Listed in [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)** · DeepSeek Harness plugin
 
 **English** | [中文](./README.zh.md)

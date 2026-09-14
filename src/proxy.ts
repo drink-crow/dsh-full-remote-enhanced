@@ -33,6 +33,7 @@ import {
   DEFAULT_HEADERS_TIMEOUT_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,
 } from './limits.ts'
+import type { BackendAuth } from './backend-auth.ts'
 export { effectiveRemoteAddress, forwardHeaders, sanitizeResponseHeaders, sanitizeUpgradeResponseHeaders } from './proxy-headers.ts'
 import {
   HOME_PATH,
@@ -109,6 +110,12 @@ export interface ProxySpec {
   compressResponses?: boolean
   /** Add immutable Cache-Control on hashed /assets/* 200s with no upstream cache header. Default true. */
   cacheHashedAssets?: boolean
+  /**
+   * Bridge that authenticates this proxy against a Harness backend requiring
+   * browser-auth (0.1.5 and later). Omitted by tests and by deployments whose
+   * backend needs no cookie.
+   */
+  backendAuth?: BackendAuth
 }
 
 /** ProxySpec after listenProxy resolves defaults and internal helpers. */
@@ -325,7 +332,11 @@ function pipeUpstreamBody(incoming: IncomingMessage, res: ServerResponse, gzip: 
   incoming.pipe(gzipStream).pipe(res)
 }
 
-function proxyRequest(req: IncomingMessage, res: ServerResponse, spec: RuntimeSpec, sessionId: string) {
+/**
+ * Forward one authenticated request to the backend.
+ * @param authCookie - backend browser-auth cookie from the bridge, when one is cached.
+ */
+function proxyRequest(req: IncomingMessage, res: ServerResponse, spec: RuntimeSpec, sessionId: string, authCookie?: string) {
   const contentLength = Number(req.headers['content-length'] ?? 0)
   if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > spec.maxRequestBytes) {
     drainRequest(req)
@@ -341,10 +352,15 @@ function proxyRequest(req: IncomingMessage, res: ServerResponse, spec: RuntimeSp
       tls: spec.tls === true,
       trustForwardedProto: spec.trustForwardedProto(),
       forwardedFor: effectiveRemoteAddress(req, spec),
+      authCookie,
     }),
   }, (incoming) => {
     clearConnectTimeout()
     const status = incoming.statusCode ?? 502
+    // A 401 from the backend means the bridged cookie is stale (backend
+    // restarted, or the cookie expired): drop it so the next request
+    // re-handshakes instead of failing every remote request from now on.
+    if (status === 401) spec.backendAuth?.invalidate()
     const responseHeaders = sanitizeResponseHeaders(incoming.headers)
     maybeSetHashedAssetCacheControl(
       responseHeaders,
@@ -716,7 +732,10 @@ export function listenProxy(spec: ProxySpec): Promise<ProxyServer> {
       }
       return
     }
-    proxyRequest(req, res, runtimeSpec, session.id)
+    const backendCookie = runtimeSpec.backendAuth === undefined
+      ? undefined
+      : await runtimeSpec.backendAuth.ensure()
+    proxyRequest(req, res, runtimeSpec, session.id, backendCookie)
   }
 
   const serverOptions = {
@@ -732,7 +751,8 @@ export function listenProxy(spec: ProxySpec): Promise<ProxyServer> {
     ? createHttpsServer({ ...serverOptions, key: tlsOption.key, cert: tlsOption.cert }, onRequest)
     : createServer(serverOptions, onRequest)
 
-  server.on('upgrade', (req, socket, head) => {
+  // Async so a WebSocket upgrade can wait for the backend browser-auth bridge.
+  server.on('upgrade', async (req, socket, head) => {
     upgradedSockets.add(socket)
     socket.once('close', () => upgradedSockets.delete(socket))
     const upgradeRemote = effectiveRemoteAddress(req, runtimeSpec)
@@ -762,6 +782,7 @@ export function listenProxy(spec: ProxySpec): Promise<ProxyServer> {
       tls: tlsEnabled,
       trustForwardedProto: runtimeSpec.trustForwardedProto(),
       forwardedFor: upgradeRemote,
+      authCookie: runtimeSpec.backendAuth === undefined ? undefined : await runtimeSpec.backendAuth.ensure(),
     })
     headers.connection = 'Upgrade'
     headers.upgrade = req.headers.upgrade ?? 'websocket'

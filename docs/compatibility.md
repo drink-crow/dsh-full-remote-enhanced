@@ -40,6 +40,7 @@ Include trees, not only the loader root store.
 | TLS terminator / tunnel | Forwarded headers are trusted only when explicitly configured | Set `trustForwardedFor` only behind a loopback edge that strips/rebuilds those headers; set `trustCloudflareConnectingIp` only for a real Cloudflare edge |
 | Cloudflare (or other) edge compression | The edge may already gzip/brotli HTML/JS/CSS/JSON | Proxy-side gzip still helps LAN/SSH/frp; do not expect a second large saving on a Cloudflare quick tunnel. See [HTTP gzip](./http-gzip.md) |
 | Plugin that changes Harness trust/bootstrap globals | The browser bootstrap is a compatibility seam | Test `settings.describe`, `credentials.describe`, directory browsing, SSE, and WebSocket after installing both |
+| Harness 0.1.5+ browser authentication | The Web GUI requires a cookie minted from the per-process `dsh web` launch token, while this proxy strips cookies in both directions | Nothing to configure: the proxy performs that handshake server-side through `connection.authenticatedUrl()` and replays the cookie on requests and upgrades. A warning `backend browser authentication unavailable (…)` means the handshake failed — check that the running Harness exposes that member, and that nothing else rewrites the backend `Host` |
 
 ## Runtime acceptance checks
 
@@ -57,6 +58,10 @@ After composing plugins, verify all of the following through the proxy:
 7. on a non-loopback hostname, Settings → Models shows the provider catalog
    rather than `settings are unavailable in this browser` (Harness 0.1.0-rc.8
    describe-mirror, still required on 0.1.1-rc.1);
+8. on Harness 0.1.5 or later, an authenticated request and a WebSocket upgrade
+   reach the backend while the browser holds no Harness cookie at all (the
+   proxy mints and replays it), and a backend restart is recovered by the next
+   request without a re-login;
 8. on a non-loopback hostname, Settings → Models lists
    `DeepSeek-V4-Flash-Vision-Exp`, and a paste/drop of a JPEG/PNG/WebP/GIF
    under the Harness image limits is not 413'd by this proxy.

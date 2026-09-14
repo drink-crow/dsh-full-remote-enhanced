@@ -5,6 +5,21 @@ documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Backend browser-authentication bridge for DeepSeek Harness **0.1.5** and
+  later. Those releases authenticate every Web GUI request with a cookie minted
+  from a per-process launch token that `dsh web` prints at startup and never
+  persists. Because this bundle owns remote authentication and strips cookies
+  in both directions, a remote browser could not complete that handshake and
+  received `401 dsh web authentication required` from the backend. The proxy now
+  performs the handshake server-side through the Host `connection` service
+  (`authenticatedUrl()`), caches the cookie, and replays it on proxied HTTP
+  requests and WebSocket upgrades; a backend `401` invalidates the cache so the
+  next request re-handshakes. The launch token never reaches the browser, the
+  plugin gate stays the only boundary a remote client passes, and Harness
+  releases without that service (0.1.1 and earlier) proxy exactly as before.
+
 ## 0.3.7 (2026-08-21)
 
 ### Changed

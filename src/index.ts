@@ -27,8 +27,10 @@ import {
   isLoopbackHost,
   publishHost,
   reachableHosts,
+  rewriteLoopbackAuthority,
   asError,
 } from './http-util.ts'
+import { createBackendAuth, type AuthenticatedUrlProvider } from './backend-auth.ts'
 import { createAuditLog, defaultAuditPath } from './audit.ts'
 import { compileCidrList, ipAllowed } from './cidr.ts'
 import { createInviteStore } from './invites.ts'
@@ -315,6 +317,24 @@ export function createRuntime(ctx: RuntimeContext, config: RuntimeConfig, deps: 
         listenPort: port,
         backendHost: config.backendHost,
         backendPort,
+        // Harness 0.1.5 authenticates the Web GUI with a cookie minted from a
+        // per-process launch token. This proxy owns remote authentication and
+        // strips cookies in both directions, so it performs that handshake
+        // itself and replays the cookie; the token never reaches a browser.
+        backendAuth: createBackendAuth({
+          backendHost: config.backendHost,
+          backendPort,
+          rewriteAuthority: rewriteLoopbackAuthority(backendPort),
+          token: () => {
+            const connection = ctx.get?.('connection') as AuthenticatedUrlProvider | undefined
+            if (connection === undefined || typeof connection.authenticatedUrl !== 'function') return undefined
+            const authenticated = connection.authenticatedUrl(`http://127.0.0.1:${String(backendPort)}/`)
+            return new URL(authenticated).searchParams.get('token') ?? undefined
+          },
+          onFailure: (error) => {
+            warn(new Error(`reverse-proxy: backend browser authentication unavailable (${asError(error).message})`))
+          },
+        }),
         accessToken: state!.accessToken,
         cookieName: config.cookieName,
         controlPrefix: CONTROL_PREFIX,

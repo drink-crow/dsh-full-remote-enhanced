@@ -120,6 +120,9 @@ flowchart LR
 - 健康检查接口 `/_dsh_reverse_proxy/healthz`
 - WebSocket 升级限流：同一远程 IP 反复升级失败后会进入锁定
 - 请求体大小在流层面受限；剥离逐跳与可伪造头部；清除上游 `set-cookie`
+- 后端浏览器鉴权桥：DeepSeek Harness 0.1.5 起用「每次启动随机」的 launch
+  token 鉴权 Web GUI。本插件在服务端完成该握手并复用其 cookie，远端浏览器
+  无需 token，重启后也不必重新登录
 - 对可压缩的 HTTP 响应做 gzip（JS/CSS/HTML/JSON/SVG），客户端需声明
   `Accept-Encoding: gzip`；SSE、WebSocket、字体、登录栅栏页、不足 1 KB
   的响应不压。实测 Harness 首屏（`index.html` + 带 hash 的 index/vendor
@@ -286,6 +289,7 @@ Host/Origin 改写恢复了特权接口，同时也使 Harness 对远程客户�
 - 登录失败计入固定延时，并按 IP 返回 `429` 锁定；
 - 控制接口（`/dsh-reverse-proxy/*`）仅限回环地址访问，需要控制头，且永远不会被公网代理转发；
 - 剥离可伪造的转发头与逐跳头，代理自身的 Cookie 不会到达后端；
+- 后端自身的浏览器鉴权 Cookie（Harness 0.1.5+）由代理在服务端换取并复用，既不会下发到浏览器，launch token 也始终留在宿主进程内；
 - 可选 `trustForwardedFor`：开启后仅信任回环对端传来的转发头，用于 CIDR / 限流 / 审计，使本地隧道能识别真实客户端 IP。只有额外开启 `trustCloudflareConnectingIp` 才读取 Cloudflare 的 `CF-Connecting-IP`，否则取 `X-Forwarded-For` 最右值；回环或非法的转发值一律不信任。局域网直连请保持关闭。
 
 访问令牌须按机密保管。公网侧应终止 TLS。局域网直连可配置 `tlsCertFile` / `tlsKeyFile`（例如用 [mkcert](https://github.com/FiloSottile/mkcert) 生成）。

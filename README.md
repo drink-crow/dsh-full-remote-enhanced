@@ -166,6 +166,10 @@ flowchart LR
   per remote IP
 - Stream-level request body limit; hop-by-hop and spoofable headers are
   stripped; upstream `set-cookie` is removed
+- Backend browser-auth bridge: DeepSeek Harness 0.1.5 and later authenticate
+  the Web GUI with a per-process launch token. The proxy performs that
+  handshake server-side and replays the cookie on requests and WebSocket
+  upgrades, so a remote browser needs no token and survives restarts
 - Gzip for compressible HTTP responses (JS/CSS/HTML/JSON/SVG) when the
   client advertises gzip; SSE, WebSocket, fonts, gate pages, and bodies
   under 1 KB are skipped. Measured first-load of the Harness shell:
@@ -410,6 +414,9 @@ access-control layer provided by this plugin consists of:
   control header and are never forwarded through the public proxy;
 - removal of spoofable forwarding and hop-by-hop headers, so the proxy's
   own cookie never reaches the backend;
+- the backend's own browser-auth cookie (Harness 0.1.5+) is minted and cached
+  by the proxy and replayed server-side, so it never reaches the browser and
+  the launch token stays inside the Host process;
 - optional `trustForwardedFor`: when enabled, only a loopback peer's
   rightmost `X-Forwarded-For` value is trusted for CIDR / rate-limit / audit.
   `CF-Connecting-IP` needs the separate, Cloudflare-only

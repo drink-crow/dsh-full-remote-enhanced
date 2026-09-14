@@ -96,7 +96,7 @@ export function cookieIsSecure(req: IncomingMessage, spec: { tls: boolean, trust
   return requestIsHttps(req, spec.tls === true, spec.trustForwardedProto())
 }
 
-export function forwardHeaders(req: IncomingMessage, backendHost: string, options: { tls?: boolean, trustForwardedProto?: boolean, forwardedFor?: string } = {}) {
+export function forwardHeaders(req: IncomingMessage, backendHost: string, options: { tls?: boolean, trustForwardedProto?: boolean, forwardedFor?: string, authCookie?: string } = {}) {
   const headers: Record<string, string | string[] | undefined> = {}
   const nominated = connectionTokens(req.headers)
   for (const [key, value] of Object.entries(req.headers)) {
@@ -114,6 +114,10 @@ export function forwardHeaders(req: IncomingMessage, backendHost: string, option
   headers['x-forwarded-host'] = sourceHost
   headers['x-forwarded-proto'] = proto
   headers['x-dsh-reverse-proxy'] = '1'
+  // The client's own cookie was dropped above: a remote browser must not be
+  // able to reach the backend's session surface directly. This one is minted
+  // by the backend-auth bridge for the proxy itself, never for the browser.
+  if (options.authCookie !== undefined && options.authCookie !== '') headers.cookie = options.authCookie
   return headers
 }
 
